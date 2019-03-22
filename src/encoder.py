@@ -25,12 +25,11 @@ class SublayerConnection(nn.Module):
         self.layer_norm = LayerNorm(hidden_size)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, input, sublayer_input):
+    def forward(self, input: torch.Tensor, sublayer:nn.Module):
         # residual connection
-        # TODO different from original
-        residual = input + sublayer_input
-        norm_res = self.dropout(self.layer_norm(residual))
-        return norm_res
+        # TODO why norm inside
+        residual = input + self.dropout(sublayer(self.layer_norm(input)))
+        return residual
 
 # two sublayers: multi-head attention and ff
 class EncoderLayer(nn.Module):
@@ -43,14 +42,14 @@ class EncoderLayer(nn.Module):
 
     def forward(self, input, mask):
         # multi head attention
-        att_res = self.sublayer[0](input, self.self_attn(input, input, input, mask))
+        att_res = self.sublayer[0](input, lambda x: self.self_attn(x, x, x, mask))
         ff_res = self.sublayer[1](att_res, self.feed_forward)
 
         return ff_res
 
 # a stack of N encoder layers
 class Encoder(nn.Module):
-    def __init__(self, N, encoder_layer:EncoderLayer):
+    def __init__(self, encoder_layer:EncoderLayer, N):
         super(Encoder, self).__init__()
         self.layer_norm = LayerNorm(encoder_layer.hidden_size)
         # TODO maybe problematic
@@ -73,9 +72,9 @@ class DecoderLayer(nn.Module):
         self.sublayer = nn.Sequential(*[SublayerConnection(hidden_size, dropout) for i in range(3)])
         self.hidden_size = hidden_size
     def forward(self, input, memory, src_mask, trg_mask):
-        self_attn_res = self.sublayer[0](input, self.self_attn(input, input, input, trg_mask))
-        src_attn_res = self.sublayer[1](self_attn_res, self.src_attn(self_attn_res, memory, memory, src_mask))
-        ff_res = self.sublayer[2](src_attn_res, self.feed_forward(src_attn_res))
+        self_attn_res = self.sublayer[0](input, lambda x: self.self_attn(x, x, x, trg_mask))
+        src_attn_res = self.sublayer[1](self_attn_res, lambda x: self.src_attn(x, memory, memory, src_mask))
+        ff_res = self.sublayer[2](src_attn_res, self.feed_forward)
         return ff_res
 
 class Decoder(nn.Module):
