@@ -7,6 +7,20 @@ import torch.nn.functional as F
 import math
 from copy import deepcopy
 
+class Projector(nn.Module):
+    def __init__(self, hidden_size, vocab_size):
+        super(Projector, self).__init__()
+        self.linear = nn.Linear(hidden_size, vocab_size)
+
+    def forward(self, input):
+        '''
+        :param input: [batch, len, hidden_size]
+        :return: [batch, len, vocab_size]
+        '''
+        linear_res = self.linear(input)
+        soft_max = F.softmax(linear_res, dim=-1)
+        return soft_max
+
 class LayerNorm(nn.Module):
     def __init__(self, hidden_size):
         super(LayerNorm, self).__init__()
@@ -78,7 +92,7 @@ class DecoderLayer(nn.Module):
         return ff_res
 
 class Decoder(nn.Module):
-    def __init__(self, N, decoder_layer: DecoderLayer):
+    def __init__(self, decoder_layer: DecoderLayer, N):
         super(Decoder, self).__init__()
         self.layers = nn.Sequential(*[deepcopy(decoder_layer) for i in range(N)])
         self.layer_norm = LayerNorm(decoder_layer.hidden_size)
@@ -89,87 +103,19 @@ class Decoder(nn.Module):
         layer_norm = self.layer_norm(input)
         return layer_norm
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, head_num, hidden_size, dropout=0.1):
-        super(MultiHeadAttention, self).__init__()
-        assert hidden_size % head_num == 0
-        # number of hidden size after linear transform of EACH head
-        self.d_k = int(hidden_size / head_num)
-        self.head_num = head_num
-        self.dropout = nn.Dropout(dropout)
-        self.linears = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for i in range(3)])
-        self.out_linear = nn.Linear(hidden_size, hidden_size)
-
-    # calculate how likely the query and key, get w_i for each key_i. The result is sum_{w_i value_i}
-    # the attention is calculated by DOT product
-    def attention(self, query, key, value, mask: torch.Tensor = None, dropout: nn.Dropout = None):
-        '''
-        :param query: [batch_size, head_num, qlen, d_k]
-        :param key: [batch_size, head_num, klen, d_k]
-        :param value: [batch_size, head_num, klen, d_k]
-        :param mask: [batch_size, 1, qlen, klen] or [batch_size, 1, 1, klen]
-        :return: attention score: [batch_size, head_num, qlen, d_k]
-        '''
-        d_k = query.size(-1)
-        # [batch_size, head_num, qlen, klen]
-        matmul_res = torch.matmul(query, torch.transpose(key, -1, -2))
-        norm_matmul = matmul_res / math.sqrt(d_k)
-        if mask != None:
-            norm_matmul = norm_matmul.masked_fill(mask == 0, -1e9)
-        # softmax over key
-        attn_scores = F.softmax(norm_matmul, dim=-1)
-
-        if dropout != None:
-            attn_scores = dropout(attn_scores)
-        # [batch_size, head_num, qlen, d_k]
-        attn_values = torch.matmul(attn_scores, value)
-
-        return attn_scores, attn_values
-
-    def forward(self, query, key, value, mask=None):
-        '''
-        :param query:[batch_size, len, hidden_size]
-        :param key: [batch_size, len, hidden_size]
-        :param value: [batch_size, len, hidden_size]
-        :param mask: [batch_size, len, len] or [batch_size, 1, len]
-        :return:
-        '''
-        batch_size = query.size(0)
-        if mask != None:
-            # the same for all h heads
-            # [bz, h, len, len]
-            mask = mask.unsqueeze(1)
-        # do linear projections
-        projects = []
-        for input, linear in zip([query, key, value], self.linears):
-            project = linear(input)
-            project = project.view(batch_size, -1, self.head_num, self.d_k)
-            project = torch.transpose(project, 1, 2)
-            projects.append(project)
-        pquery, pkey, pvalue = projects
-
-        attn_values, self.attn_scores = self.attention(pquery, pkey, pvalue, mask=mask, dropout=self.dropout)
-        # concatenate heads
-        # [batch_size, qlen, head_num, d_k]
-        attn_values = torch.transpose(attn_values, 1, 2).continuous()
-        attn_values = attn_values.view(batch_size, -1, self.head_num * self.d_k)
-        attn_values = self.out_linear(attn_values)
-
-        return attn_values
-
-
 class EncoderDecoder(nn.Module):
-    def __init__(self, encoder:Encoder, decoder:Decoder, src_embed, trg_embed, generator):
+    def __init__(self, encoder:Encoder, decoder:Decoder, src_embed, trg_embed, projector):
         super(EncoderDecoder, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.src_embed = src_embed
         self.trg_embed = trg_embed
-        self.generator = generator
+        self.projector = projector
 
     def forward(self, src, trg, src_mask, trg_mask):
         encode_embed = self.src_embed(src)
         encode_res = self.encoder(encode_embed, src_mask)
         decode_embed = self.trg_embed(trg)
         decode_res = self.decoder(decode_embed, memory=encode_res, src_mask=src_mask, trg_mask=trg_mask)
-        return decode_res
+        trg_prob = self.projector(decode_res)
+        return trg_prob
