@@ -125,7 +125,13 @@ class TestModule(unittest.TestCase):
             self.assertEqual(lr1, lr2)
 
     def test_lsm(self):
+        predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
+                                     [0, 0.2, 0.7, 0.1, 0],
+                                     [0, 0.2, 0.7, 0.1, 0]])
+        torch.LongTensor([2, 1, 0])
 
+
+    def
 
 
 if __name__ == '__main__':

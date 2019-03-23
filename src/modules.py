@@ -63,20 +63,22 @@ class NoamOpt:
         lr *= self.factor
         for p in self.optimizer.param_groups:
             p['lr'] = lr
-        #self.optimizer.step()
+        # self.optimizer.step()
         return lr
 
 
 class LabelSmoothing(nn.Module):
-    def __init__(self, smoothing, vocab_size):
+    def __init__(self, smoothing, vocab_size, pad_idx):
         super(LabelSmoothing, self).__init__()
         self.criterion = nn.KLDivLoss(reduction='sum')
         self.vocab_size = vocab_size
         self.smoothing = smoothing
+        self.pad_idx = pad_idx
 
     def forward(self, x, target):
-        smooth_target = torch.zeros(target.size())
-        smooth_target.fill_(self.smoothing / x.size(-1))
+        smooth_target = torch.zeros(x.size())
+        smooth_target.fill_(self.smoothing / (x.size(1) - 2))  # ignore s and eos
         smooth_target.scatter_(-1, target, 1 - self.smoothing)
+        smooth_target[:, self.padding_idx] = 0
         smooth_target.requires_grad = False
         return self.criterion(x, smooth_target)
