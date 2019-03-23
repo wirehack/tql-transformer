@@ -33,12 +33,11 @@ class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len, dropout_probs):
         super(PositionalEncoding, self).__init__()
         self.pe = torch.zeros(max_len, d_model)
-        pos = torch.arange(0, max_len, dtype=torch.float32) / 10000
-        exponent = torch.arange(0, d_model, 2, dtype=torch.float32) * 2 / d_model
+        pos = torch.arange(0, max_len, dtype=torch.float32)
         pos = pos.unsqueeze(1)
-        exponent = exponent.unsqueeze(0)
-        self.pe[:, 0::2] = torch.sin(torch.pow(pos, exponent))
-        self.pe[:, 1::2] = torch.cos(torch.pow(pos, exponent))
+        exponent = torch.exp(torch.arange(0, d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / d_model))
+        self.pe[:, 0::2] = torch.sin(pos * exponent)
+        self.pe[:, 1::2] = torch.cos(pos * exponent)
         self.pe = self.pe.unsqueeze(0)
         self.pe.requires_grad = False
         self.dropout = nn.Dropout(dropout_probs)
@@ -64,7 +63,8 @@ class NoamOpt:
         lr *= self.factor
         for p in self.optimizer.param_groups:
             p['lr'] = lr
-        self.optimizer.step()
+        #self.optimizer.step()
+        return lr
 
 
 class LabelSmoothing(nn.Module):
