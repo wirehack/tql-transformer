@@ -66,6 +66,9 @@ class NoamOpt:
         self.optimizer.step()
         # return lr
 
+    def zero_grad(self):
+        self.optimizer.zero_grad()
+
 
 class LabelSmoothing(nn.Module):
     def __init__(self, smoothing, vocab_size, pad_idx):
@@ -76,6 +79,13 @@ class LabelSmoothing(nn.Module):
         self.pad_idx = pad_idx
 
     def forward(self, x, target):
+        '''
+        :param x: [batch, len, vocab_size]
+        :param target: [batch, len]
+        :return:
+        '''
+        x = x.contiguous().view(-1, x.size(-1))
+        target = target.contiguous().view(-1)
         smooth_target = torch.zeros(x.size())
         smooth_target.fill_(self.smoothing / (x.size(1) - 2))  # ignore s and eos
         smooth_target.scatter_(-1, target.unsqueeze(1), 1 - self.smoothing)

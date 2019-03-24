@@ -16,11 +16,11 @@ class Batch():
         self.src = src
         # [batch_size, 1, len]
         self.src_mask = (src != pad).unsqueeze(-2)
-        if trg:
+        if trg is not None:
             self.trg = trg[:, :-1]
             self.trg_y = trg[:, 1:]
-            # [batch_size, len, len]
-            self.trg_mask = self.create_trg_mask(trg, pad)
+            # [batch_size, len - 1, len - 1]
+            self.trg_mask = self.create_trg_mask(self.trg, pad)
         self.token_num = torch.sum(self.trg_y != pad)
 
     def create_trg_mask(self, input:torch.Tensor, pad):
@@ -42,6 +42,9 @@ class DataLoader:
         self.dev_file = dev_file
         self.w2i_src = defaultdict(lambda: len(self.w2i_src))
         self.w2i_trg = defaultdict(lambda: len(self.w2i_trg))
+        pad = self.w2i_src["<pad>"]
+        pad = self.w2i_trg["<pad>"]
+        ed = self.w2i_src["</s>"]
         st = self.w2i_trg["<s>"]
         ed = self.w2i_trg["</s>"]
         unk = self.w2i_src["<unk>"]
@@ -74,10 +77,11 @@ class DataLoader:
         src_file = open(file_name + "." + src_suffix, "r", encoding="utf-8")
         trg_file = open(file_name + "." + trg_suffix, "r", encoding="utf-8")
         for src_line, trg_line in zip(src_file, trg_file):
+            line_tot += 1
             src_tks = src_line.strip().split()
             trg_tks = trg_line.strip().split()
-            src = [self.w2i_src[tk] for tk in src_tks]
-            trg = [self.w2i_trg[tk] for tk in self.w2i_trg["<s>"] + trg_tks + self.w2i_trg["</s>"]]
+            src = [self.w2i_src[tk] for tk in src_tks +  [self.w2i_src["</s>"]]]
+            trg = [self.w2i_trg[tk] for tk in [self.w2i_trg["<s>"]] + trg_tks + [self.w2i_trg["</s>"]]]
             yield(src, trg)
         print("[INFO] number of lines in {}: {}".format(file_name, str(line_tot)))
 

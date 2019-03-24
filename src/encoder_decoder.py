@@ -18,7 +18,7 @@ class Projector(nn.Module):
         :return: [batch, len, vocab_size]
         '''
         linear_res = self.linear(input)
-        soft_max = F.softmax(linear_res, dim=-1)
+        soft_max = F.log_softmax(linear_res, dim=-1)
         return soft_max
 
 class LayerNorm(nn.Module):

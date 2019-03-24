@@ -16,7 +16,7 @@ EPOCH_CHECK=1
 def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head_num=8, dropout=0.1):
     attn = MultiHeadAttention(head_num, d_model, dropout)
     feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout)
-    position = PositionalEncoding(d_model, dropout)
+    position = PositionalEncoding(d_model, max_len=5000, dropout_probs=dropout)
     model = EncoderDecoder(
         Encoder(EncoderLayer(d_model, deepcopy(attn), deepcopy(feed_forward), dropout), N),
         Decoder(DecoderLayer(d_model, deepcopy(attn), deepcopy(attn), deepcopy(feed_forward), dropout), N),
@@ -26,7 +26,7 @@ def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head
     # init with Xavier
     for p in model.parameters():
         if p.dim() > 1:
-            nn.init.xavier_uniform(p)
+            nn.init.xavier_uniform_(p)
     return model
 
 
@@ -84,13 +84,14 @@ def save_model(model:nn.Module, path):
     print("[SAVE] save model!")
 
 def train(args):
+    #TODO add dropout
     data_loader = DataLoader(args.train_file, args.dev_file, args.src_suffix, args.trg_suffix,
-                             args.map_file, args.batch_size, args.pool_size, pad=0)
+                             args.w2i_map_file, args.batch_size, args.pool_size, pad=0)
     src_vocab_size, trg_vocab_size = data_loader.src_vocab_size, data_loader.trg_vocab_size
-    model = make_model(src_vocab_size, trg_vocab_size)
+    model = make_model(src_vocab_size=src_vocab_size, trg_vocab_size=trg_vocab_size)
     model.to(device)
     criterion = LabelSmoothing(smoothing=0.1, vocab_size=trg_vocab_size, pad_idx=0)
-    optimizer = NoamOpt(model.parameters(), args.d_model, args.warmup, args.factor)
+    optimizer = NoamOpt(model.parameters(), d_model=args.d_model, warmup=args.warmup, factor=args.factor)
     best_loss = float('inf')
     for ep in range(1000):
         model.train()
@@ -98,7 +99,6 @@ def train(args):
         run_epoch(ep, train_iter, model, criterion, optimizer)
 
         if (ep + 1) % EPOCH_CHECK == 0:
-            print("[EVALUATING]")
             with torch.no_grad():
                 model.eval()
                 dev_iter = data_loader.create_batches("dev")
