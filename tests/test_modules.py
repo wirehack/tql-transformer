@@ -68,8 +68,8 @@ class NoamOptTrue:
         for p in self.optimizer.param_groups:
             p['lr'] = rate
         self._rate = rate
-        return rate
-        # self.optimizer.step()
+        # return rate
+        self.optimizer.step()
 
     def rate(self, step=None):
         "Implement `lrate` above"
@@ -78,6 +78,32 @@ class NoamOptTrue:
         return self.factor * \
                (self.model_size ** (-0.5) *
                 min(step ** (-0.5), step * self.warmup ** (-1.5)))
+
+
+class LabelSmoothingTrue(nn.Module):
+    "Implement label smoothing."
+
+    def __init__(self, size, padding_idx, smoothing=0.0):
+        super(LabelSmoothingTrue, self).__init__()
+        self.criterion = nn.KLDivLoss(size_average=False)
+        self.padding_idx = padding_idx
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.size = size
+        self.true_dist = None
+
+    def forward(self, x, target):
+        assert x.size(1) == self.size
+        true_dist = x.data.clone()
+        true_dist.fill_(self.smoothing / (self.size - 2))
+        true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+        true_dist[:, self.padding_idx] = 0
+        mask = torch.nonzero(target.data == self.padding_idx)
+        if mask.dim() > 0:
+            true_dist.index_fill_(0, mask.squeeze(), 0.0)
+        self.true_dist = true_dist
+        true_dist.require_grad = False
+        return self.criterion(x, true_dist)
 
 
 class TestModule(unittest.TestCase):
@@ -128,8 +154,14 @@ class TestModule(unittest.TestCase):
         predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
                                      [0, 0.2, 0.7, 0.1, 0],
                                      [0, 0.2, 0.7, 0.1, 0]])
-        torch.LongTensor([2, 1, 0])
-
+        target = torch.LongTensor([2, 1, 0])
+        torch.manual_seed(0)
+        my_lsm = modules.LabelSmoothing(0.1, 5, 0)
+        torch.manual_seed(0)
+        true_lsm = LabelSmoothingTrue(5, 0, 0.1)
+        my_output = my_lsm(predict, target)
+        true_output = true_lsm(predict, target)
+        self.assertTrue(torch.allclose(my_output, true_output))
 
 
 if __name__ == '__main__':

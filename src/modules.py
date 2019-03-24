@@ -63,8 +63,8 @@ class NoamOpt:
         lr *= self.factor
         for p in self.optimizer.param_groups:
             p['lr'] = lr
-        # self.optimizer.step()
-        return lr
+        self.optimizer.step()
+        # return lr
 
 
 class LabelSmoothing(nn.Module):
@@ -78,7 +78,10 @@ class LabelSmoothing(nn.Module):
     def forward(self, x, target):
         smooth_target = torch.zeros(x.size())
         smooth_target.fill_(self.smoothing / (x.size(1) - 2))  # ignore s and eos
-        smooth_target.scatter_(-1, target, 1 - self.smoothing)
-        smooth_target[:, self.padding_idx] = 0
+        smooth_target.scatter_(-1, target.unsqueeze(1), 1 - self.smoothing)
+        smooth_target[:, self.pad_idx] = 0
+        mask = torch.nonzero(target == self.pad_idx)
+        if mask.dim() > 0:
+            smooth_target.index_fill_(0, mask.squeeze(), 0)
         smooth_target.requires_grad = False
         return self.criterion(x, smooth_target)
