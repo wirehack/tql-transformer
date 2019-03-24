@@ -7,11 +7,10 @@ from src.encoder_decoder import EncoderDecoder, Encoder, Decoder, EncoderLayer, 
 from src.modules import PositionwiseFeedForward, PositionalEncoding, Embeddings, LabelSmoothing, NoamOpt
 from src.mul_attention import MultiHeadAttention
 from copy import deepcopy
-from src.data_loader import DataLoader
+from src.data_loader import DataLoader, Batch
 from src.config import argps
-import data_loader
 
-device = device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EPOCH_CHECK = 10
 
 
@@ -92,7 +91,6 @@ def save_model(model: nn.Module, path):
 
 
 def train(args):
-    # TODO add dropout
     data_loader = DataLoader(args.train_file, args.dev_file, args.src_suffix, args.trg_suffix,
                              args.w2i_map_file, args.batch_size, args.pool_size, pad=0)
     src_vocab_size, trg_vocab_size = data_loader.src_vocab_size, data_loader.trg_vocab_size
@@ -124,7 +122,7 @@ def data_gen(batch, nbatches):
         data[:, 0] = 1
         src = data
         tgt = data
-        yield (data_loader.Batch(src, tgt, 0))
+        yield (Batch(src, tgt, 0))
 
 
 def train_synthetic():
@@ -140,7 +138,6 @@ def train_synthetic():
         run_epoch(ep, train_iter, model, criterion, optimizer)
 
         if (ep + 1) % EPOCH_CHECK == 0:
-            print("[EVALUATING]")
             with torch.no_grad():
                 model.eval()
                 dev_loss = run_epoch(ep, data_gen(30, 20), model, criterion, optimizer=None)
@@ -151,4 +148,5 @@ def train_synthetic():
 
 if __name__ == "__main__":
     args = argps()
-    train_synthetic()
+    # train_synthetic()
+    train(args)
