@@ -24,8 +24,10 @@ class Projector(nn.Module):
 class LayerNorm(nn.Module):
     def __init__(self, hidden_size):
         super(LayerNorm, self).__init__()
-        self.a_2 = torch.ones(hidden_size, requires_grad=True)
-        self.b_2 = torch.ones(hidden_size, requires_grad=True)
+        # self.a_2 = torch.ones(hidden_size, requires_grad=True)
+        # self.b_2 = torch.zeros(hidden_size, requires_grad=True)
+        self.a_2 = nn.Parameter(torch.ones(hidden_size))
+        self.b_2 = nn.Parameter(torch.zeros(hidden_size))
     def forward(self, input:torch.Tensor):
         mean = torch.mean(input, dim=-1, keepdim=True)
         std = torch.std(input, dim=-1, keepdim=True)
@@ -40,7 +42,6 @@ class SublayerConnection(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, input: torch.Tensor, sublayer:nn.Module):
-        # residual connection
         # TODO why norm inside
         residual = input + self.dropout(sublayer(self.layer_norm(input)))
         return residual

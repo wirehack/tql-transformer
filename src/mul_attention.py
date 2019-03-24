@@ -7,7 +7,6 @@ from copy import deepcopy
 class MultiHeadAttention(nn.Module):
     def __init__(self, head_num, hidden_size, dropout=0.1):
         super(MultiHeadAttention, self).__init__()
-        assert hidden_size % head_num == 0
         # number of hidden size after linear transform of EACH head
         self.d_k = int(hidden_size / head_num)
         self.head_num = head_num
@@ -29,7 +28,8 @@ class MultiHeadAttention(nn.Module):
         # [batch_size, head_num, qlen, klen]
         matmul_res = torch.matmul(query, torch.transpose(key, -1, -2))
         norm_matmul = matmul_res / math.sqrt(d_k)
-        if mask != None:
+        if mask is not None:
+            # norm_matmul = torch.where(mask != 0, norm_matmul, mask.float() + -1e9)
             norm_matmul = norm_matmul.masked_fill(mask == 0, -1e9)
         # softmax over key
         attn_scores = F.softmax(norm_matmul, dim=-1)
@@ -39,7 +39,7 @@ class MultiHeadAttention(nn.Module):
         # [batch_size, head_num, qlen, d_k]
         attn_values = torch.matmul(attn_scores, value)
 
-        return attn_scores, attn_values
+        return attn_values, attn_scores
 
     def forward(self, query, key, value, mask=None):
         '''
@@ -50,7 +50,7 @@ class MultiHeadAttention(nn.Module):
         :return:
         '''
         batch_size = query.size(0)
-        if mask != None:
+        if mask is not None:
             # the same for all h heads
             # [bz, h, len, len]
             mask = mask.unsqueeze(1)
@@ -66,7 +66,7 @@ class MultiHeadAttention(nn.Module):
         attn_values, self.attn_scores = self.attention(pquery, pkey, pvalue, mask=mask, dropout=self.dropout)
         # concatenate heads
         # [batch_size, qlen, head_num, d_k]
-        attn_values = torch.transpose(attn_values, 1, 2).continuous()
+        attn_values = torch.transpose(attn_values, 1, 2).contiguous()
         attn_values = attn_values.view(batch_size, -1, self.head_num * self.d_k)
         # [batch_size, qlen, hidden_size]
         attn_values = self.out_linear(attn_values)

@@ -1,15 +1,14 @@
 import numpy as np
 import torch
 from torch import nn
-from torchtext import data, datasets
 import time
-import torch.nn.functional as F
 from src.utils.util_func import *
 from src.encoder_decoder import EncoderDecoder, Encoder, Decoder, EncoderLayer, DecoderLayer, Projector
-from src import PositionwiseFeedForward, PositionalEncoding, Embedding, LableSmoothing, NoamOpt
-from src.attention import MultiHeadAttention
+from src.modules import PositionwiseFeedForward, PositionalEncoding, Embeddings, LabelSmoothing, NoamOpt
+from src.mul_attention import MultiHeadAttention
 from copy import deepcopy
 from src.data_loader import DataLoader
+from src.config import argps
 
 device = device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EPOCH_CHECK=1
@@ -21,30 +20,14 @@ def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head
     model = EncoderDecoder(
         Encoder(EncoderLayer(d_model, deepcopy(attn), deepcopy(feed_forward), dropout), N),
         Decoder(DecoderLayer(d_model, deepcopy(attn), deepcopy(attn), deepcopy(feed_forward), dropout), N),
-        nn.Sequential(Embedding(d_model, src_vocab_size), deepcopy(position)),
-        nn.Sequential(Embedding(d_model, trg_vocab_size), deepcopy(position)),
+        nn.Sequential(Embeddings(d_model, src_vocab_size), deepcopy(position)),
+        nn.Sequential(Embeddings(d_model, trg_vocab_size), deepcopy(position)),
         Projector(d_model, trg_vocab_size))
     # init with Xavier
     for p in model.parameters():
         if p.dim() > 1:
             nn.init.xavier_uniform(p)
     return model
-
-
-def calc_loss(criterion, optimizer, predict, gold, token_num):
-    '''
-    :param predict: [batch_size, len, trg_vocab_size]
-    :param gold: [batch_size, len]
-    :param token_num: int
-    :return: loss of the batch, also update parameters
-    '''
-    # project to vocab size
-    loss = self.criterion(predict, gold) / token_num
-    loss.backward()
-    self.optimizer.step()
-    self.optimizer.zero_grad()
-
-    return loss * token_num
 
 
 def train_epoch(data_iter, model:EncoderDecoder, loss_compute):
@@ -100,13 +83,14 @@ def save_model(model:nn.Module, path):
     torch.save({"model_state_dict":model.state_dict()}, path)
     print("[SAVE] save model!")
 
-def train():
-    data_loader = DataLoader()
+def train(args):
+    data_loader = DataLoader(args.train_file, args.dev_file, args.src_suffix, args.trg_suffix,
+                             args.map_file, args.batch_size, args.pool_size, pad=0)
     src_vocab_size, trg_vocab_size = data_loader.src_vocab_size, data_loader.trg_vocab_size
     model = make_model(src_vocab_size, trg_vocab_size)
     model.to(device)
-    criterion = LableSmoothing()
-    optimizer = NoamOpt()
+    criterion = LabelSmoothing(smoothing=0.1, vocab_size=trg_vocab_size, pad_idx=0)
+    optimizer = NoamOpt(model.parameters(), args.d_model, args.warmup, args.factor)
     best_loss = float('inf')
     for ep in range(1000):
         model.train()
@@ -121,6 +105,9 @@ def train():
                 dev_loss = run_epoch(ep, dev_iter, model, criterion, optimizer=None)
                 if dev_loss < best_loss:
                     best_loss = dev_loss
-                    save_model(model, model_path + "_" + str(ep) + ".tar")
+                    save_model(model, args.model_path + "_" + str(ep) + ".tar")
 
 
+if __name__ == "__main__":
+    args = argps()
+    train(args)

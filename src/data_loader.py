@@ -71,8 +71,8 @@ class DataLoader:
 
     def load_data(self, file_name, src_suffix, trg_suffix):
         line_tot = 0
-        src_file = open(file_name + "_" + src_suffix, "r", encoding="utf-8")
-        trg_file = open(file_name + "_" + trg_suffix, "r", encoding="utf-8")
+        src_file = open(file_name + "." + src_suffix, "r", encoding="utf-8")
+        trg_file = open(file_name + "." + trg_suffix, "r", encoding="utf-8")
         for src_line, trg_line in zip(src_file, trg_file):
             src_tks = src_line.strip().split()
             trg_tks = trg_line.strip().split()

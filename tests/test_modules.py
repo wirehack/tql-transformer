@@ -131,8 +131,6 @@ class TestModule(unittest.TestCase):
         torch.LongTensor([2, 1, 0])
 
 
-    def
-
 
 if __name__ == '__main__':
     unittest.main()
