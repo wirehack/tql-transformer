@@ -58,7 +58,7 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
                        cur_batch.src_mask, cur_batch.trg_mask)
         loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
         perplexity = F.nll_loss(output.view(-1, output.size(2)), cur_batch.trg_y.view(-1), reduction='sum')
-        ll_sum += perplexity
+        ll_sum += perplexity.item()
         if optimizer is not None:
             loss.backward()
             optimizer.step()
