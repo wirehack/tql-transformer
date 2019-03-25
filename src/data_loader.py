@@ -6,6 +6,7 @@ import pickle
 import torch
 from src.utils.util_func import *
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class Batch():
     def __init__(self, src:torch.Tensor, trg:torch.Tensor=None, pad=0):
         '''
@@ -22,6 +23,9 @@ class Batch():
             # [batch_size, len - 1, len - 1]
             self.trg_mask = self.create_trg_mask(self.trg, pad)
         self.token_num = torch.sum(self.trg_y != pad)
+
+        self.src, self.src_mask = self.src.to(device), self.src_mask.to(device)
+        self.trg, self.trg_mask, self.trg_y = self.trg.to(device), self.trg_mask.to(device), self.trg_y.to(device)
 
     def create_trg_mask(self, input:torch.Tensor, pad):
         # [batch_size, 1, len]

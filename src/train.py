@@ -1,7 +1,10 @@
+import sys
+sys.path.append("/home/shuyanzh/workshop/tql-transformer/")
+import time
+import functools
 import numpy as np
 import torch
 from torch import nn
-import time
 from src.utils.util_func import *
 from src.encoder_decoder import EncoderDecoder, Encoder, Decoder, EncoderLayer, DecoderLayer, Projector
 from src.modules import PositionwiseFeedForward, PositionalEncoding, Embeddings, LabelSmoothing, NoamOpt
@@ -11,7 +14,9 @@ from src.data_loader import DataLoader
 from src.config import argps
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-EPOCH_CHECK = 10
+EPOCH_CHECK = 1
+
+print = functools.partial(print, flush=True)
 
 
 # make the model
@@ -50,7 +55,7 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
         tot_loss += loss
         tot_tokens += cur_batch.token_num
         record_tokens += cur_batch.token_num
-        if i % 50 == 1:
+        if i % 5000 == 1:
             elapsed = time.time() - start_time
             # TODO why not / elapse work
             print("[INFO] epoch step {:d}, loss: {:.8f}, tokens per sec: {:.8f}".format(i, loss / cur_batch.token_num,
