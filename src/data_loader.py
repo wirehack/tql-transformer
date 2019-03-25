@@ -84,6 +84,9 @@ class DataLoader:
             line_tot += 1
             src_tks = src_line.strip().split()
             trg_tks = trg_line.strip().split()
+            # filter sentence pair if ENG sentence is longer than 70
+            if len(trg_tks) >= 70:
+                continue
             src = [self.w2i_src[tk] for tk in src_tks +  [self.w2i_src["</s>"]]]
             trg = [self.w2i_trg[tk] for tk in [self.w2i_trg["<s>"]] + trg_tks + [self.w2i_trg["</s>"]]]
             yield(src, trg)
@@ -92,8 +95,8 @@ class DataLoader:
         src_file.close()
         trg_file.close()
 
-
-    def create_batches(self, dataset:str):
+    # TODO change to token wise batch
+    def create_batches(self, dataset:str, max_token=5000):
         if dataset == "train":
             data = self.all_train
             random.shuffle(data)
@@ -106,6 +109,38 @@ class DataLoader:
             cur_size = min(self.pool_size, len(data) - i)
             cur_pool = data[i:i+cur_size]
             cur_pool.sort(key=lambda x: len(x[0]))
+
+            batches = []
+            src_seq_len = [x[0] for x in cur_pool]
+            max_seq_len = src_seq_len[0]
+            prev_start = 0
+            batch_size = 1
+            for idx, cur_seq_len in enumerate(src_seq_len[1:]):
+                max_seq_len = max(max_seq_len, cur_seq_len)
+                new_tot_tokens = (batch_size + 1) * max_seq_len
+                if new_tot_tokens > max_token:
+                    batches.append((prev_start, batch_size))
+                    prev_start = idx
+                    batch_size = 1
+                else:
+                    batch_size += 1
+            for st, batch_size in batches:
+                cur_data = cur_pool[st:st + batch_size]
+                src_sents = [x[0] for x in cur_data]
+                src_seq_len = [len(x) for x in src_sents]
+                src_max_len = max(src_seq_len)
+
+                trg_sents = [x[1] for x in cur_data]
+                trg_seq_len = [len(x) for x in trg_sents]
+                trg_max_len = max(trg_seq_len)
+                # pad
+                src_sents = torch.LongTensor(
+                    [x + [self.pad for i in range(src_max_len - x_len)] for x, x_len in zip(src_sents, src_seq_len)])
+                trg_sents = torch.LongTensor(
+                    [x + [self.pad for i in range(trg_max_len - x_len)] for x, x_len in zip(trg_sents, trg_seq_len)])
+                yield (Batch(src_sents, trg_sents))
+
+            ''' 
             for j in range(0, len(cur_pool), self.batch_size):
                 cur_size = min(self.batch_size, len(cur_pool) - j)
                 cur_data = cur_pool[j:j+cur_size]
@@ -120,3 +155,4 @@ class DataLoader:
                 src_sents = torch.LongTensor([x + [self.pad for i in range(src_max_len-x_len)] for x, x_len in zip(src_sents, src_seq_len)])
                 trg_sents = torch.LongTensor([x + [self.pad for i in range(trg_max_len-x_len)] for x, x_len in zip(trg_sents, trg_seq_len)])
                 yield(Batch(src_sents, trg_sents))
+            '''

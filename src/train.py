@@ -38,9 +38,10 @@ def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head
 
 def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
     start_time = time.time()
-    tot_tokens = 0
-    tot_loss = 0
-    record_tokens = 0
+    tot_tokens = 0.0
+    tot_loss = 0.0
+    record_tokens = 0.0
+    record_loss = 0.0
     for i, cur_batch in enumerate(data_iter):
         output = model(cur_batch.src, cur_batch.trg,
                        cur_batch.src_mask, cur_batch.trg_mask)
@@ -55,9 +56,11 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
         tot_loss += loss
         tot_tokens += cur_batch.token_num
         record_tokens += cur_batch.token_num
+        record_loss += loss
         if i % 5000 == 1:
             elapsed = time.time() - start_time
             # TODO why not / elapse work
+            # TODO print average loss
             print("[INFO] epoch step {:d}, loss: {:.8f}, tokens per sec: {:.8f}".format(i, loss / cur_batch.token_num,
                                                                                         record_tokens / (elapsed + 1)))
             start_time = time.time()
