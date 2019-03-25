@@ -17,7 +17,7 @@ def argps():
     parser.add_argument("--w2i_map_file", default="/projects/tir2/users/shuyanzh/mtnt/model/fr_en_clean_map")
 
     parser.add_argument("--model_path", default="/projects/tir2/users/shuyanzh/mtnt/model/fr_en_clean_model")
-    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--pool_size", type=int, default=10000)
     parser.add_argument("--d_model", type=int, default=512)
     parser.add_argument("--warmup", type=int, default=4000)

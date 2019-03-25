@@ -15,7 +15,7 @@ from src.config import argps
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EPOCH_CHECK = 1
-
+STEP_CHECK = 1000
 print = functools.partial(print, flush=True)
 
 
@@ -23,7 +23,7 @@ print = functools.partial(print, flush=True)
 def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head_num=8, dropout=0.1):
     attn = MultiHeadAttention(head_num=head_num, hidden_size=d_model, dropout=dropout)
     feed_forward = PositionwiseFeedForward(d_model=d_model, d_ff=d_ff, dropout_probs=dropout)
-    position = PositionalEncoding(d_model, max_len=5000, dropout_probs=dropout)
+    position = PositionalEncoding(d_model, max_len=5000, dropout_probs=dropout,device=device)
     model = EncoderDecoder(
         Encoder(EncoderLayer(hidden_size=d_model, self_attn=deepcopy(attn), feed_forward=deepcopy(feed_forward), dropout=dropout), N=N),
         Decoder(DecoderLayer(hidden_size=d_model, self_attn=deepcopy(attn), src_attn=deepcopy(attn), feed_forward=deepcopy(feed_forward), dropout=dropout), N=N),
@@ -37,38 +37,55 @@ def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head
     return model
 
 def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
+    epoch_start = time.time()
     start_time = time.time()
     tot_tokens = 0.0
     tot_loss = 0.0
+    tot_ll_sum = 0.0
     record_tokens = 0.0
     record_loss = 0.0
+    record_ll_sum = 0.0
+    ll_sum = 0.0
     for i, cur_batch in enumerate(data_iter):
+        # [batch_size, len, vocab_size]
+        # trg_y [batch_size, len]
         output = model(cur_batch.src, cur_batch.trg,
                        cur_batch.src_mask, cur_batch.trg_mask)
         loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
+        # TODO bug
+        # perplexity = torch.sum(output, cur_batch.trg_y) / cur_batch.token_num
+        # perplexity = torch.exp(-perplexity)
+        ll_sum += 0
         if optimizer is not None:
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
         loss = loss * cur_batch.token_num
-
-        tot_loss += loss
+        tot_loss += loss.item()
+        tot_ll_sum += ll_sum
         tot_tokens += cur_batch.token_num
+
         record_tokens += cur_batch.token_num
         record_loss += loss
-        if i % 5000 == 1:
+        record_ll_sum += ll_sum
+        if i % STEP_CHECK == 1:
             elapsed = time.time() - start_time
+            record_ppl = torch.exp(-record_ll_sum / record_tokens)
             # TODO why not / elapse work
-            # TODO print average loss
-            print("[INFO] epoch step {:d}, loss: {:.8f}, tokens per sec: {:.8f}".format(i, loss / cur_batch.token_num,
-                                                                                        record_tokens / (elapsed + 1)))
+            print("[INFO] epoch step {:d}, loss: {:.8f}, perplexity: {:.8f}, time: {:.8f}, tokens per sec: {:.8f}".format(i, record_loss / record_tokens,
+                   record_ppl, elapsed, record_tokens / (elapsed + 1)))
             start_time = time.time()
-            record_tokens = 0
-    print("[INFO] epoch {:d}: loss={:.1f}/{:.1f}={:.4f}, time={:.2f}".format(epoch,
+
+            record_tokens = 0.0
+            record_loss = 0.0
+            record_ll_sum = 0.0
+    tot_ppl = torch.exp(-tot_ll_sum / tot_tokens)
+    print("[INFO] epoch {:d}: loss={:.1f}/{:.1f}={:.4f}, total perplexity: {:.4f}, time={:.2f}".format(epoch,
                                                                              tot_loss, tot_tokens,
                                                                              tot_loss / tot_tokens,
-                                                                             time.time() - start_time))
+                                                                             tot_ppl,
+                                                                             time.time() - epoch_start))
     return tot_loss / tot_tokens
 
 
@@ -83,9 +100,9 @@ def train(args):
     src_vocab_size, trg_vocab_size = data_loader.src_vocab_size, data_loader.trg_vocab_size
     model = make_model(src_vocab_size=src_vocab_size, trg_vocab_size=trg_vocab_size)
     model.to(device)
-    criterion = LabelSmoothing(smoothing=0.1, vocab_size=trg_vocab_size, pad_idx=0)
+    criterion = LabelSmoothing(smoothing=0.1, vocab_size=trg_vocab_size, pad_idx=0,device=device)
     optimizer = NoamOpt(model.parameters(), d_model=args.d_model, warmup=args.warmup, factor=args.factor)
-    best_loss = float('inf')
+    # best_loss = float('inf')
     for ep in range(1000):
         model.train()
         train_iter = data_loader.create_batches("train")
@@ -96,10 +113,10 @@ def train(args):
                 model.eval()
                 dev_iter = data_loader.create_batches("dev")
                 print("===============eval===============")
-                dev_loss = run_epoch(ep, dev_iter, model, criterion, optimizer=None)
-                if dev_loss < best_loss:
-                    best_loss = dev_loss
-                    save_model(model, args.model_path + "_" + str(ep) + ".tar")
+                run_epoch(ep, dev_iter, model, criterion, optimizer=None)
+                # if dev_loss < best_loss:
+                # best_loss = dev_loss
+                save_model(model, args.model_path + "_" + str(ep) + ".tar")
                 print("===============eval===============")
 
 

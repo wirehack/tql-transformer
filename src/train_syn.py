@@ -13,6 +13,8 @@ from src.train import make_model, run_epoch
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EPOCH_CHECK = 1
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def data_gen(batch, nbatches):
     "Generate random data for a src-tgt copy task."
     V = 11
@@ -42,9 +44,9 @@ def train_synthetic():
     V = 11
     model = make_model(V, V)
     model.to(device)
-    criterion = LabelSmoothing(smoothing=0.0, vocab_size=V, pad_idx=0)
+    criterion = LabelSmoothing(smoothing=0.0, vocab_size=V, pad_idx=0, device=device)
     optimizer = NoamOpt(model.parameters(), args.d_model, args.warmup, args.factor)
-    best_loss = float('inf')
+    best_loss = float(100000)
     for ep in range(1000):
         model.train()
         train_iter = data_gen(30, 20)
@@ -54,10 +56,7 @@ def train_synthetic():
             print("===============eval===============")
             with torch.no_grad():
                 model.eval()
-                dev_loss = run_epoch(ep, data_gen(30, 20), model, criterion, optimizer=None)
-                if dev_loss < best_loss:
-                    best_loss = dev_loss
-                    # save_model(model, args.model_path + "_" + str(ep) + ".tar")
+                run_epoch(ep, data_gen(30, 20), model, criterion, optimizer=None)
                 src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
                 src_mask = torch.ones(1, 1, 10)
                 print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))

@@ -113,10 +113,25 @@ class EncoderDecoder(nn.Module):
         self.trg_embed = trg_embed
         self.projector = projector
 
-    def forward(self, src, trg, src_mask, trg_mask):
+    def encode(self, src, src_mask):
         encode_embed = self.src_embed(src)
         encode_res = self.encoder(encode_embed, src_mask)
+        return encode_res
+
+    def decode(self, src_memory, trg, src_mask, trg_mask):
         decode_embed = self.trg_embed(trg)
-        decode_res = self.decoder(decode_embed, memory=encode_res, src_mask=src_mask, trg_mask=trg_mask)
+        decode_res = self.decoder(decode_embed, memory=src_memory, src_mask=src_mask, trg_mask=trg_mask)
+        return decode_res
+
+    def forward(self, src, trg, src_mask, trg_mask):
+        '''
+        :param src: [batch_size, slen]
+        :param trg: [batch_size, tlen]
+        :param src_mask: [batch_size, 1, slen]
+        :param trg_mask: [batch_size, len, tlen]
+        :return: [batch_size, tlen, vocab_size]
+        '''
+        encode_res = self.encode(src, src_mask)
+        decode_res = self.decode(encode_res, trg, src_mask, trg_mask)
         trg_prob = self.projector(decode_res)
         return trg_prob
