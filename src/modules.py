@@ -30,7 +30,7 @@ class Embeddings(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len, dropout_probs):
+    def __init__(self, d_model, max_len, dropout_probs, device):
         super(PositionalEncoding, self).__init__()
         self.pe = torch.zeros(max_len, d_model)
         pos = torch.arange(0, max_len, dtype=torch.float32)
@@ -40,6 +40,7 @@ class PositionalEncoding(nn.Module):
         self.pe[:, 1::2] = torch.cos(pos * exponent)
         self.pe = self.pe.unsqueeze(0)
         self.pe.requires_grad = False
+        self.pe = self.pe.to(device)
         self.dropout = nn.Dropout(dropout_probs)
 
     def forward(self, x):
@@ -71,12 +72,13 @@ class NoamOpt:
 
 
 class LabelSmoothing(nn.Module):
-    def __init__(self, smoothing, vocab_size, pad_idx):
+    def __init__(self, smoothing, vocab_size, pad_idx,device):
         super(LabelSmoothing, self).__init__()
         self.criterion = nn.KLDivLoss(reduction='sum')
         self.vocab_size = vocab_size
         self.smoothing = smoothing
         self.pad_idx = pad_idx
+        self.device = device
 
     def forward(self, x, target):
         '''
@@ -87,6 +89,7 @@ class LabelSmoothing(nn.Module):
         x = x.contiguous().view(-1, x.size(-1))
         target = target.contiguous().view(-1)
         smooth_target = torch.zeros(x.size())
+        smooth_target = smooth_target.to(self.device)
         smooth_target.fill_(self.smoothing / (x.size(1) - 2))  # ignore s and eos
         smooth_target.scatter_(-1, target.unsqueeze(1), 1 - self.smoothing)
         smooth_target[:, self.pad_idx] = 0
