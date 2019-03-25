@@ -1,10 +1,12 @@
 import sys
+
 sys.path.append("/home/shuyanzh/workshop/tql-transformer/")
 import time
 import functools
 import numpy as np
 import torch
 from torch import nn
+import torch.nn.functional as F
 from src.utils.util_func import *
 from src.encoder_decoder import EncoderDecoder, Encoder, Decoder, EncoderLayer, DecoderLayer, Projector
 from src.modules import PositionwiseFeedForward, PositionalEncoding, Embeddings, LabelSmoothing, NoamOpt
@@ -23,10 +25,12 @@ print = functools.partial(print, flush=True)
 def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head_num=8, dropout=0.1):
     attn = MultiHeadAttention(head_num=head_num, hidden_size=d_model, dropout=dropout)
     feed_forward = PositionwiseFeedForward(d_model=d_model, d_ff=d_ff, dropout_probs=dropout)
-    position = PositionalEncoding(d_model, max_len=5000, dropout_probs=dropout,device=device)
+    position = PositionalEncoding(d_model, max_len=5000, dropout_probs=dropout, device=device)
     model = EncoderDecoder(
-        Encoder(EncoderLayer(hidden_size=d_model, self_attn=deepcopy(attn), feed_forward=deepcopy(feed_forward), dropout=dropout), N=N),
-        Decoder(DecoderLayer(hidden_size=d_model, self_attn=deepcopy(attn), src_attn=deepcopy(attn), feed_forward=deepcopy(feed_forward), dropout=dropout), N=N),
+        Encoder(EncoderLayer(hidden_size=d_model, self_attn=deepcopy(attn), feed_forward=deepcopy(feed_forward),
+                             dropout=dropout), N=N),
+        Decoder(DecoderLayer(hidden_size=d_model, self_attn=deepcopy(attn), src_attn=deepcopy(attn),
+                             feed_forward=deepcopy(feed_forward), dropout=dropout), N=N),
         nn.Sequential(Embeddings(d_model, src_vocab_size), deepcopy(position)),
         nn.Sequential(Embeddings(d_model, trg_vocab_size), deepcopy(position)),
         Projector(d_model, trg_vocab_size))
@@ -35,6 +39,7 @@ def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head
         if p.dim() > 1:
             nn.init.xavier_uniform_(p)
     return model
+
 
 def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
     epoch_start = time.time()
@@ -52,10 +57,8 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
         output = model(cur_batch.src, cur_batch.trg,
                        cur_batch.src_mask, cur_batch.trg_mask)
         loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
-        # TODO bug
-        # perplexity = torch.sum(output, cur_batch.trg_y) / cur_batch.token_num
-        # perplexity = torch.exp(-perplexity)
-        ll_sum += 0
+        perplexity = F.nll_loss(output.view(-1, output.size(2)), cur_batch.trg_y.view(-1), reduction='sum')
+        ll_sum += perplexity
         if optimizer is not None:
             loss.backward()
             optimizer.step()
@@ -73,8 +76,10 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
             elapsed = time.time() - start_time
             record_ppl = torch.exp(-record_ll_sum / record_tokens)
             # TODO why not / elapse work
-            print("[INFO] epoch step {:d}, loss: {:.8f}, perplexity: {:.8f}, time: {:.8f}, tokens per sec: {:.8f}".format(i, record_loss / record_tokens,
-                   record_ppl, elapsed, record_tokens / (elapsed + 1)))
+            print(
+                "[INFO] epoch step {:d}, loss: {:.8f}, perplexity: {:.8f}, time: {:.8f}, tokens per sec: {:.8f}".format(
+                    i, record_loss / record_tokens,
+                    record_ppl, elapsed, record_tokens / (elapsed + 1)))
             start_time = time.time()
 
             record_tokens = 0.0
@@ -82,10 +87,11 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
             record_ll_sum = 0.0
     tot_ppl = torch.exp(-tot_ll_sum / tot_tokens)
     print("[INFO] epoch {:d}: loss={:.1f}/{:.1f}={:.4f}, total perplexity: {:.4f}, time={:.2f}".format(epoch,
-                                                                             tot_loss, tot_tokens,
-                                                                             tot_loss / tot_tokens,
-                                                                             tot_ppl,
-                                                                             time.time() - epoch_start))
+                                                                                                       tot_loss,
+                                                                                                       tot_tokens,
+                                                                                                       tot_loss / tot_tokens,
+                                                                                                       tot_ppl,
+                                                                                                       time.time() - epoch_start))
     return tot_loss / tot_tokens
 
 
@@ -100,7 +106,7 @@ def train(args):
     src_vocab_size, trg_vocab_size = data_loader.src_vocab_size, data_loader.trg_vocab_size
     model = make_model(src_vocab_size=src_vocab_size, trg_vocab_size=trg_vocab_size)
     model.to(device)
-    criterion = LabelSmoothing(smoothing=0.1, vocab_size=trg_vocab_size, pad_idx=0,device=device)
+    criterion = LabelSmoothing(smoothing=0.1, vocab_size=trg_vocab_size, pad_idx=0, device=device)
     optimizer = NoamOpt(model.parameters(), d_model=args.d_model, warmup=args.warmup, factor=args.factor)
     # best_loss = float('inf')
     for ep in range(1000):
