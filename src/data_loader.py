@@ -103,8 +103,8 @@ class DataLoader:
             cur_pool = data[i:i+cur_size]
             cur_pool.sort(key=lambda x: len(x[0]))
             for j in range(0, len(cur_pool), self.batch_size):
-                cur_size = min(self.batch_size, len(cur_pool) - i)
-                cur_data = cur_pool[i:i+cur_size]
+                cur_size = min(self.batch_size, len(cur_pool) - j)
+                cur_data = cur_pool[j:j+cur_size]
                 src_sents = [x[0] for x in cur_data]
                 src_seq_len = [len(x) for x in src_sents]
                 src_max_len = max(src_seq_len)
