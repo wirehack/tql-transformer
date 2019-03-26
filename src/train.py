@@ -76,7 +76,7 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
 
         if i % STEP_CHECK == 1:
             elapsed = time.time() - start_time
-            record_ppl = torch.exp(record_ll_sum / record_tokens)
+            record_ppl = torch.exp(record_ll_sum / record_tokens).item()
             # TODO why not / elapse work
             print("[INFO] epoch step {:d}, loss: {:.6f}, perplexity: {:.4f}, time: {:.2f}s, tokens per sec: {:.2f}".format(i, record_loss / record_tokens,
                                                                                                             record_ppl, elapsed, record_tokens / (elapsed + 1)))
@@ -85,7 +85,7 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
             record_ll_sum = 0
             record_tokens = 0
 
-    tot_ppl = torch.exp(tot_ll_sum / tot_tokens)
+    tot_ppl = torch.exp(tot_ll_sum / tot_tokens).item()
     print("[INFO] epoch {:d}: loss={:.6f}, perplexity: {:.4f}, time={:.2f}".format(epoch,
                                                                                    tot_loss / tot_tokens,
                                                                                    tot_ppl,
