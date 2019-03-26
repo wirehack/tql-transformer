@@ -5,7 +5,7 @@ from collections import defaultdict
 import pickle
 import torch
 from src.utils.util_func import *
-
+MAX_LEN=70
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class Batch():
     def __init__(self, src:torch.Tensor, trg:torch.Tensor=None, pad=0):
@@ -24,8 +24,8 @@ class Batch():
             self.trg_mask = self.create_trg_mask(self.trg, pad)
         self.token_num = torch.sum(self.trg_y != pad).item()
 
-        self.src, self.src_mask = self.src.to(device), self.src_mask.to(device)
-        self.trg, self.trg_mask, self.trg_y = self.trg.to(device), self.trg_mask.to(device), self.trg_y.to(device)
+        # self.src, self.src_mask = self.src.to(device), self.src_mask.to(device)
+        # self.trg, self.trg_mask, self.trg_y = self.trg.to(device), self.trg_mask.to(device), self.trg_y.to(device)
 
     def create_trg_mask(self, input:torch.Tensor, pad):
         # [batch_size, 1, len]
@@ -84,12 +84,14 @@ class DataLoader:
             line_tot += 1
             src_tks = src_line.strip().split()
             trg_tks = trg_line.strip().split()
-            # filter sentence pair if ENG sentence is longer than 70
-            if len(trg_tks) >= 70:
+            # filter sentence pair if ENG sentence is longer than 70 or FR > 80
+            if len(trg_tks) >= MAX_LEN or len(src_tks) > MAX_LEN:
                 continue
             src = [self.w2i_src[tk] for tk in src_tks +  [self.w2i_src["</s>"]]]
             trg = [self.w2i_trg[tk] for tk in [self.w2i_trg["<s>"]] + trg_tks + [self.w2i_trg["</s>"]]]
             yield(src, trg)
+            if line_tot > 10000:
+                break
         print("[INFO] number of lines in {}: {}".format(file_name, str(line_tot)))
 
         src_file.close()
@@ -108,24 +110,47 @@ class DataLoader:
         for i in range(0, len(data), self.pool_size):
             cur_size = min(self.pool_size, len(data) - i)
             cur_pool = data[i:i+cur_size]
-            cur_pool.sort(key=lambda x: len(x[0]))
+            cur_pool.sort(key=lambda x: len(x[0]), reverse=True)
 
             batches = []
             src_seq_len = [len(x[0]) for x in cur_pool]
             max_seq_len = src_seq_len[0]
+
+            trg_seq_len = [len(x[1]) for x in cur_pool]
+            max_trg_seq_len = trg_seq_len[0]
+
             prev_start = 0
             batch_size = 1
-            for idx, cur_seq_len in enumerate(src_seq_len[1:]):
-                max_seq_len = max(max_seq_len, cur_seq_len)
-                new_tot_tokens = (batch_size + 1) * max_seq_len
-                if new_tot_tokens > self.batch_size:
+
+            # for idx in range(1, len(src_seq_len)):
+            #     cur_seq_len = src_seq_len[idx]
+            #     max_seq_len = max(max_seq_len, cur_seq_len)
+            #     new_tot_tokens = (batch_size + 1) * max_seq_len
+            #
+            #     cur_trg_seq_len = trg_seq_len[idx]
+            #     max_trg_seq_len = max(max_trg_seq_len, cur_trg_seq_len)
+            #     new_trg_tot_tokens = (batch_size + 1) * max_trg_seq_len
+            #
+            #     if new_tot_tokens > self.batch_size or new_trg_tot_tokens > self.batch_size or idx == (len(src_seq_len) - 1):
+            #         batches.append((prev_start, batch_size))
+            #         prev_start = idx
+            #         batch_size = 1
+            #     else:
+            #         batch_size += 1
+            # batches.append((prev_start, batch_size))
+
+            for idx in range(1, len(src_seq_len)):
+                if batch_size == self.batch_size or idx == (cur_size - 1):
                     batches.append((prev_start, batch_size))
                     prev_start = idx
                     batch_size = 1
                 else:
                     batch_size += 1
+            batches.append((prev_start, batch_size))
+
             for st, batch_size in batches:
                 cur_data = cur_pool[st:st + batch_size]
+
                 src_sents = [x[0] for x in cur_data]
                 src_seq_len = [len(x) for x in src_sents]
                 src_max_len = max(src_seq_len)
@@ -133,11 +158,12 @@ class DataLoader:
                 trg_sents = [x[1] for x in cur_data]
                 trg_seq_len = [len(x) for x in trg_sents]
                 trg_max_len = max(trg_seq_len)
+                print(batch_size, src_max_len, trg_max_len, batch_size * src_max_len, batch_size * trg_max_len)
                 # pad
                 src_sents = torch.LongTensor(
-                    [x + [self.pad for i in range(src_max_len - x_len)] for x, x_len in zip(src_sents, src_seq_len)])
+                    [x + [self.pad for _ in range(src_max_len - x_len)] for x, x_len in zip(src_sents, src_seq_len)])
                 trg_sents = torch.LongTensor(
-                    [x + [self.pad for i in range(trg_max_len - x_len)] for x, x_len in zip(trg_sents, trg_seq_len)])
+                    [x + [self.pad for _ in range(trg_max_len - x_len)] for x, x_len in zip(trg_sents, trg_seq_len)])
                 yield (Batch(src_sents, trg_sents))
 
             ''' 
