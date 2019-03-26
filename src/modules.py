@@ -72,7 +72,7 @@ class NoamOpt:
 
 
 class LabelSmoothing(nn.Module):
-    def __init__(self, smoothing, vocab_size, pad_idx,device):
+    def __init__(self, smoothing, vocab_size, pad_idx, device):
         super(LabelSmoothing, self).__init__()
         self.criterion = nn.KLDivLoss(reduction='sum')
         self.vocab_size = vocab_size
@@ -88,8 +88,7 @@ class LabelSmoothing(nn.Module):
         '''
         x = x.contiguous().view(-1, x.size(-1))
         target = target.contiguous().view(-1)
-        smooth_target = torch.zeros(x.size())
-        smooth_target = smooth_target.to(self.device)
+        smooth_target = torch.zeros(x.size()).to(self.device)
         smooth_target.fill_(self.smoothing / (x.size(1) - 2))  # ignore s and eos
         smooth_target.scatter_(-1, target.unsqueeze(1), 1 - self.smoothing)
         smooth_target[:, self.pad_idx] = 0

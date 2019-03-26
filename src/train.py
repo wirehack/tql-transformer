@@ -4,6 +4,7 @@ sys.path.append("/home/shuyanzh/workshop/tql-transformer/")
 import time
 import functools
 import numpy as np
+import math
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -17,7 +18,7 @@ from src.config import argps
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EPOCH_CHECK = 1
-STEP_CHECK = 1000
+STEP_CHECK = 10
 print = functools.partial(print, flush=True)
 
 
@@ -56,41 +57,27 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
     for i, cur_batch in enumerate(data_iter):
         # [batch_size, len, vocab_size]
         # trg_y [batch_size, len]
-        src, trg, src_mask, trg_mask, trg_y = \
-            cur_batch.src.to(device), cur_batch.trg.to(device), cur_batch.src_mask.to(device), cur_batch.trg_mask.to(device), cur_batch.trg_y.to(device)
-        try:
-            output = model(src, trg,
-                           src_mask, trg_mask)
-            # loss = criterion(output, trg_y) / cur_batch.token_num
-            loss = F.nll_loss(output.contiguous().view(-1, output.size(2)), trg_y.contiguous().view(-1), reduction='sum')
-            ll_sum = F.nll_loss(output.contiguous().view(-1, output.size(2)), trg_y.contiguous().view(-1), reduction='sum')
-            if optimizer is not None:
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-        except RuntimeError as e:
-                if 'out of memory' in str(e):
-                    print('| WARNING: ran out of memory in {:d}'.format(i))
-                    for p in model.parameters():
-                        if p.grad is not None:
-                            del p.grad  # free some memory
-                    torch.cuda.empty_cache()
-                    continue
-                else:
-                    raise e
+        output = model(cur_batch.src, cur_batch.trg,
+                       cur_batch.src_mask, cur_batch.trg_mask)
+        loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
+        ll_sum = F.nll_loss(output.contiguous().view(-1, output.size(2)), cur_batch.trg_y.contiguous().view(-1), reduction='sum')
+        if optimizer is not None:
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
         loss = loss * cur_batch.token_num
         tot_loss += loss.item()
-        tot_ll_sum += ll_sum
+        tot_ll_sum += ll_sum.item()
         tot_tokens += cur_batch.token_num
 
         record_loss += loss.item()
-        record_ll_sum += ll_sum
+        record_ll_sum += ll_sum.item()
         record_tokens += cur_batch.token_num
 
         if i % STEP_CHECK == 1:
             elapsed = time.time() - start_time
-            record_ppl = torch.exp(record_ll_sum / record_tokens).item()
+            record_ppl = math.exp(record_ll_sum / record_tokens)
             # TODO why not / elapse work
             print("[INFO] epoch step {:d}, loss: {:.6f}, perplexity: {:.4f}, time: {:.2f}s, tokens per sec: {:.2f}".format(i, record_loss / record_tokens,
                                                                                                             record_ppl, elapsed, record_tokens / (elapsed + 1)))
@@ -99,7 +86,7 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
             record_ll_sum = 0
             record_tokens = 0
 
-    tot_ppl = torch.exp(tot_ll_sum / tot_tokens).item()
+    tot_ppl = math.exp(tot_ll_sum / tot_tokens)
     print("[INFO] epoch {:d}: loss={:.6f}, perplexity: {:.4f}, time={:.2f}".format(epoch,
                                                                                    tot_loss / tot_tokens,
                                                                                    tot_ppl,
