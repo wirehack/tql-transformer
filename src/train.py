@@ -44,21 +44,22 @@ def make_model(src_vocab_size, trg_vocab_size, N=6, d_model=512, d_ff=2048, head
 def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
     epoch_start = time.time()
     start_time = time.time()
-    tot_tokens = 0.0
-    tot_loss = 0.0
-    tot_ll_sum = 0.0
-    record_tokens = 0.0
-    record_loss = 0.0
-    record_ll_sum = 0.0
-    ll_sum = 0.0
+
+    tot_tokens = 0
+    tot_loss = 0
+    tot_ll_sum = 0
+
+    record_tokens = 0
+    record_loss = 0
+    record_ll_sum = 0
+
     for i, cur_batch in enumerate(data_iter):
         # [batch_size, len, vocab_size]
         # trg_y [batch_size, len]
         output = model(cur_batch.src, cur_batch.trg,
                        cur_batch.src_mask, cur_batch.trg_mask)
         loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
-        perplexity = F.nll_loss(output.view(-1, output.size(2)), cur_batch.trg_y.view(-1), reduction='sum')
-        ll_sum += perplexity
+        ll_sum = F.nll_loss(output.contiguous().view(-1, output.size(2)), cur_batch.trg_y.contiguous().view(-1), reduction='sum')
         if optimizer is not None:
             loss.backward()
             optimizer.step()
@@ -69,29 +70,26 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
         tot_ll_sum += ll_sum
         tot_tokens += cur_batch.token_num
 
-        record_tokens += cur_batch.token_num
-        record_loss += loss
+        record_loss += loss.item()
         record_ll_sum += ll_sum
+        record_tokens += cur_batch.token_num
+
         if i % STEP_CHECK == 1:
             elapsed = time.time() - start_time
-            record_ppl = torch.exp(-record_ll_sum / record_tokens)
+            record_ppl = torch.exp(record_ll_sum / record_tokens)
             # TODO why not / elapse work
-            print(
-                "[INFO] epoch step {:d}, loss: {:.8f}, perplexity: {:.8f}, time: {:.8f}, tokens per sec: {:.8f}".format(
-                    i, record_loss / record_tokens,
-                    record_ppl, elapsed, record_tokens / (elapsed + 1)))
+            print("[INFO] epoch step {:d}, loss: {:.6f}, perplexity: {:.4f}, time: {:.2f}s, tokens per sec: {:.2f}".format(i, record_loss / record_tokens,
+                                                                                                            record_ppl, elapsed, record_tokens / (elapsed + 1)))
             start_time = time.time()
+            record_loss = 0
+            record_ll_sum = 0
+            record_tokens = 0
 
-            record_tokens = 0.0
-            record_loss = 0.0
-            record_ll_sum = 0.0
-    tot_ppl = torch.exp(-tot_ll_sum / tot_tokens)
-    print("[INFO] epoch {:d}: loss={:.1f}/{:.1f}={:.4f}, total perplexity: {:.4f}, time={:.2f}".format(epoch,
-                                                                                                       tot_loss,
-                                                                                                       tot_tokens,
-                                                                                                       tot_loss / tot_tokens,
-                                                                                                       tot_ppl,
-                                                                                                       time.time() - epoch_start))
+    tot_ppl = torch.exp(tot_ll_sum / tot_tokens)
+    print("[INFO] epoch {:d}: loss={:.6f}, perplexity: {:.4f}, time={:.2f}".format(epoch,
+                                                                                   tot_loss / tot_tokens,
+                                                                                   tot_ppl,
+                                                                                   time.time() - epoch_start))
     return tot_loss / tot_tokens
 
 

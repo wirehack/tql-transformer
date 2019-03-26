@@ -29,12 +29,12 @@ def data_gen(batch, nbatches):
 
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
-    ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
+    ys = torch.ones(1, 1).fill_(start_symbol)
     for i in range(max_len-1):
-        out = model.decode(memory, src_mask,
-                           ys,
-                           generate_subseq_mask(ys.size(1).type_as(src.data)))
-        prob = model.generator(out[:, -1])
+        ys = ys.long()
+        out = model.decode(memory, ys,
+                           src_mask, generate_subseq_mask(ys.size(1)))
+        prob = model.projector(out[:, -1])
         _, next_word = torch.max(prob, dim = 1)
         next_word = next_word.data[0]
         ys = torch.cat([ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
@@ -46,7 +46,6 @@ def train_synthetic():
     model.to(device)
     criterion = LabelSmoothing(smoothing=0.0, vocab_size=V, pad_idx=0, device=device)
     optimizer = NoamOpt(model.parameters(), args.d_model, args.warmup, args.factor)
-    best_loss = float(100000)
     for ep in range(1000):
         model.train()
         train_iter = data_gen(30, 20)

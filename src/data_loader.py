@@ -22,7 +22,7 @@ class Batch():
             self.trg_y = trg[:, 1:]
             # [batch_size, len-1, len-1]
             self.trg_mask = self.create_trg_mask(self.trg, pad)
-        self.token_num = torch.sum(self.trg_y != pad)
+        self.token_num = torch.sum(self.trg_y != pad).item()
 
         self.src, self.src_mask = self.src.to(device), self.src_mask.to(device)
         self.trg, self.trg_mask, self.trg_y = self.trg.to(device), self.trg_mask.to(device), self.trg_y.to(device)
@@ -96,7 +96,7 @@ class DataLoader:
         trg_file.close()
 
     # TODO change to token wise batch
-    def create_batches(self, dataset:str, max_token=5000):
+    def create_batches(self, dataset:str):
         if dataset == "train":
             data = self.all_train
             random.shuffle(data)
@@ -111,14 +111,14 @@ class DataLoader:
             cur_pool.sort(key=lambda x: len(x[0]))
 
             batches = []
-            src_seq_len = [x[0] for x in cur_pool]
+            src_seq_len = [len(x[0]) for x in cur_pool]
             max_seq_len = src_seq_len[0]
             prev_start = 0
             batch_size = 1
             for idx, cur_seq_len in enumerate(src_seq_len[1:]):
                 max_seq_len = max(max_seq_len, cur_seq_len)
                 new_tot_tokens = (batch_size + 1) * max_seq_len
-                if new_tot_tokens > max_token:
+                if new_tot_tokens > self.batch_size:
                     batches.append((prev_start, batch_size))
                     prev_start = idx
                     batch_size = 1
