@@ -56,14 +56,28 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
     for i, cur_batch in enumerate(data_iter):
         # [batch_size, len, vocab_size]
         # trg_y [batch_size, len]
-        output = model(cur_batch.src, cur_batch.trg,
-                       cur_batch.src_mask, cur_batch.trg_mask)
-        loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
-        ll_sum = F.nll_loss(output.contiguous().view(-1, output.size(2)), cur_batch.trg_y.contiguous().view(-1), reduction='sum')
-        if optimizer is not None:
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+        src, trg, src_mask, trg_mask, trg_y = \
+            cur_batch.src.to(device), cur_batch.trg.to(device), cur_batch.src_mask.to(device), cur_batch.trg_mask.to(device), cur_batch.trg_y.to(device)
+        try:
+            output = model(src, trg,
+                           src_mask, trg_mask)
+            # loss = criterion(output, trg_y) / cur_batch.token_num
+            loss = F.nll_loss(output.contiguous().view(-1, output.size(2)), trg_y.contiguous().view(-1), reduction='sum')
+            ll_sum = F.nll_loss(output.contiguous().view(-1, output.size(2)), trg_y.contiguous().view(-1), reduction='sum')
+            if optimizer is not None:
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+        except RuntimeError as e:
+                if 'out of memory' in str(e):
+                    print('| WARNING: ran out of memory in {:d}'.format(i))
+                    for p in model.parameters():
+                        if p.grad is not None:
+                            del p.grad  # free some memory
+                    torch.cuda.empty_cache()
+                    continue
+                else:
+                    raise e
 
         loss = loss * cur_batch.token_num
         tot_loss += loss.item()
