@@ -1,6 +1,6 @@
 import sys
 
-sys.path.append("/home/shuyanzh/workshop/tql-transformer/")
+sys.path.append("/home/ubuntu/tql-transformer/")
 import time
 import functools
 import numpy as np
@@ -18,7 +18,7 @@ from src.config import argps
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EPOCH_CHECK = 1
-STEP_CHECK = 10
+STEP_CHECK = 1000
 print = functools.partial(print, flush=True)
 
 
@@ -60,7 +60,8 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
         output = model(cur_batch.src, cur_batch.trg,
                        cur_batch.src_mask, cur_batch.trg_mask)
         loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
-        ll_sum = F.nll_loss(output.contiguous().view(-1, output.size(2)), cur_batch.trg_y.contiguous().view(-1), reduction='sum')
+        # output_pll = output * cur_batch.trg_y_mask.unsqueeze(-1)
+        ll_sum = torch.IntTensor([0])
         if optimizer is not None:
             loss.backward()
             optimizer.step()
@@ -79,8 +80,10 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
             elapsed = time.time() - start_time
             record_ppl = math.exp(record_ll_sum / record_tokens)
             # TODO why not / elapse work
-            print("[INFO] epoch step {:d}, loss: {:.6f}, perplexity: {:.4f}, time: {:.2f}s, tokens per sec: {:.2f}".format(i, record_loss / record_tokens,
-                                                                                                            record_ppl, elapsed, record_tokens / (elapsed + 1)))
+            print(
+                "[INFO] epoch step {:d}, loss: {:.6f}, perplexity: {:.4f}, time: {:.2f}s, tokens per sec: {:.2f}".format(
+                    i, record_loss / record_tokens,
+                    record_ppl, elapsed, record_tokens / (elapsed + 1)))
             start_time = time.time()
             record_loss = 0
             record_ll_sum = 0
@@ -126,5 +129,6 @@ def train(args):
 
 
 if __name__ == "__main__":
+    torch.cuda.empty_cache()
     args = argps()
     train(args)

@@ -5,10 +5,13 @@ from collections import defaultdict
 import pickle
 import torch
 from src.utils.util_func import *
-MAX_LEN=70
+
+MAX_LEN = 70
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 class Batch():
-    def __init__(self, src:torch.Tensor, trg:torch.Tensor=None, pad=0):
+    def __init__(self, src: torch.Tensor, trg: torch.Tensor = None, pad=0):
         '''
         :param src: [batch_size, len]
         :param trg: [batch_size, len]
@@ -22,20 +25,24 @@ class Batch():
             self.trg_y = trg[:, 1:]
             # [batch_size, len-1, len-1]
             self.trg_mask = self.create_trg_mask(self.trg, pad)
+
+        # self.trg_y_mask = (self.trg_y != pad).float()
         self.token_num = torch.sum(self.trg_y != pad).item()
 
         self.src, self.src_mask = self.src.to(device), self.src_mask.to(device)
-        self.trg, self.trg_mask, self.trg_y = self.trg.to(device), self.trg_mask.to(device), self.trg_y.to(device)
+        self.trg, self.trg_mask = self.trg.to(device), self.trg_mask.to(device)
+        self.trg_y = self.trg_y.to(device)  # self.trg_y_mask.to(device)
 
-    def create_trg_mask(self, input:torch.Tensor, pad):
+    def create_trg_mask(self, input: torch.Tensor, pad):
         # [batch_size, 1, len]
         mask = (input != pad).unsqueeze(-2)
         # [1, len, len]
         subseq_mask = generate_subseq_mask(input.size(1))
         # [batch_size, len, len]
-        mask =  mask.long() & subseq_mask.long()
+        mask = mask.long() & subseq_mask.long()
 
         return mask
+
 
 class DataLoader:
     def __init__(self, train_file, dev_file, src_suffix, trg_suffix, map_file, batch_size, pool_size, pad=0):
@@ -70,11 +77,12 @@ class DataLoader:
         # save map
         with open(map_file + "_src.pkl", "wb") as f:
             pickle.dump(dict(self.w2i_src), f)
-            print("[INFO] save source char to idx map to :{}, len: {:d}".format(map_file + "_src.pkl", len(self.w2i_src)))
+            print(
+                "[INFO] save source char to idx map to :{}, len: {:d}".format(map_file + "_src.pkl", len(self.w2i_src)))
         with open(map_file + "_trg.pkl", "wb") as f:
             pickle.dump(dict(self.w2i_trg), f)
-            print("[INFO] save target char to idx map to :{}, len: {:d}".format(map_file + "_trg.pkl", len(self.w2i_trg)))
-
+            print(
+                "[INFO] save target char to idx map to :{}, len: {:d}".format(map_file + "_trg.pkl", len(self.w2i_trg)))
 
     def load_data(self, file_name, src_suffix, trg_suffix):
         line_tot = 0
@@ -87,16 +95,16 @@ class DataLoader:
             # filter sentence pair if ENG sentence is longer than 70 or FR > 80
             if len(trg_tks) >= MAX_LEN or len(src_tks) > MAX_LEN:
                 continue
-            src = [self.w2i_src[tk] for tk in src_tks +  [self.w2i_src["</s>"]]]
+            src = [self.w2i_src[tk] for tk in src_tks + [self.w2i_src["</s>"]]]
             trg = [self.w2i_trg[tk] for tk in [self.w2i_trg["<s>"]] + trg_tks + [self.w2i_trg["</s>"]]]
-            yield(src, trg)
+            yield (src, trg)
         print("[INFO] number of lines in {}: {}".format(file_name, str(line_tot)))
 
         src_file.close()
         trg_file.close()
 
     # TODO change to token wise batch
-    def create_batches(self, dataset:str):
+    def create_batches(self, dataset: str):
         if dataset == "train":
             data = self.all_train
             random.shuffle(data)
@@ -107,8 +115,8 @@ class DataLoader:
         # make pools
         for i in range(0, len(data), self.pool_size):
             cur_size = min(self.pool_size, len(data) - i)
-            cur_pool = data[i:i+cur_size]
-            cur_pool.sort(key=lambda x: len(x[0]), reverse=True)
+            cur_pool = data[i:i + cur_size]
+            cur_pool.sort(key=lambda x: (len(x[0]), len(x[1])))
 
             batches = []
             src_seq_len = [len(x[0]) for x in cur_pool]
@@ -129,7 +137,8 @@ class DataLoader:
                 max_trg_seq_len = max(max_trg_seq_len, cur_trg_seq_len)
                 new_trg_tot_tokens = (batch_size + 1) * max_trg_seq_len
 
-                if new_tot_tokens > self.batch_size or new_trg_tot_tokens > self.batch_size or idx == (len(src_seq_len) - 1):
+                if new_tot_tokens > self.batch_size or new_trg_tot_tokens > self.batch_size or idx == (
+                        len(src_seq_len) - 1):
                     batches.append((prev_start, batch_size))
                     prev_start = idx
                     batch_size = 1
@@ -145,24 +154,23 @@ class DataLoader:
             #     else:
             #         batch_size += 1
             # batches.append((prev_start, batch_size))
-            # random.shuffle(batches)
-            #
+
+            random.shuffle(batches)
             for st, batch_size in batches:
                 cur_data = cur_pool[st:st + batch_size]
 
-                src_sents = [x[0] for x in cur_data]
-                src_seq_len = [len(x) for x in src_sents]
-                src_max_len = max(src_seq_len)
+                src_sents = [torch.LongTensor(x[0]) for x in cur_data]
+                # src_seq_len = [len(x) for x in src_sents]
+                # src_max_len = max(src_seq_len)
 
-                trg_sents = [x[1] for x in cur_data]
-                trg_seq_len = [len(x) for x in trg_sents]
-                trg_max_len = max(trg_seq_len)
-                print(batch_size, src_max_len, trg_max_len, batch_size * src_max_len, batch_size * trg_max_len)
+                trg_sents = [torch.LongTensor(x[1]) for x in cur_data]
+                # trg_seq_len = [len(x) for x in trg_sents]
+                # trg_max_len = max(trg_seq_len)
+                # print(batch_size, src_max_len, trg_max_len, batch_size * src_max_len, batch_size * trg_max_len)
                 # pad
-                src_sents = torch.LongTensor(
-                    [x + [self.pad for _ in range(src_max_len - x_len)] for x, x_len in zip(src_sents, src_seq_len)])
-                trg_sents = torch.LongTensor(
-                    [x + [self.pad for _ in range(trg_max_len - x_len)] for x, x_len in zip(trg_sents, trg_seq_len)])
+                src_sents = torch.nn.utils.rnn.pad_sequence(src_sents, batch_first=True, padding_value=self.pad)
+                trg_sents = torch.nn.utils.rnn.pad_sequence(trg_sents, batch_first=True, padding_value=self.pad)
+
                 yield (Batch(src_sents, trg_sents))
 
             # for j in range(0, len(cur_pool), self.batch_size):
@@ -179,4 +187,3 @@ class DataLoader:
             #     src_sents = torch.LongTensor([x + [self.pad for i in range(src_max_len-x_len)] for x, x_len in zip(src_sents, src_seq_len)])
             #     trg_sents = torch.LongTensor([x + [self.pad for i in range(trg_max_len-x_len)] for x, x_len in zip(trg_sents, trg_seq_len)])
             #     yield(Batch(src_sents, trg_sents))
-
