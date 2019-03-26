@@ -115,21 +115,22 @@ class DataLoader:
             max_seq_len = src_seq_len[0]
             prev_start = 0
             batch_size = 1
-            for idx, cur_seq_len in enumerate(src_seq_len[1:]):
+            for idx in range(1, len(src_seq_len)):
+                cur_seq_len = src_seq_len[idx]
                 max_seq_len = max(max_seq_len, cur_seq_len)
                 new_tot_tokens = (batch_size + 1) * max_seq_len
-                if new_tot_tokens > self.batch_size:
+                if new_tot_tokens > self.batch_size or idx == (len(src_seq_len) - 1):
                     batches.append((prev_start, batch_size))
                     prev_start = idx
                     batch_size = 1
                 else:
                     batch_size += 1
+            batches.append((prev_start, batch_size))
             for st, batch_size in batches:
                 cur_data = cur_pool[st:st + batch_size]
                 src_sents = [x[0] for x in cur_data]
                 src_seq_len = [len(x) for x in src_sents]
                 src_max_len = max(src_seq_len)
-
                 trg_sents = [x[1] for x in cur_data]
                 trg_seq_len = [len(x) for x in trg_sents]
                 trg_max_len = max(trg_seq_len)
