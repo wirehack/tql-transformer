@@ -9,9 +9,8 @@ from src.utils.util_func import *
 MAX_LEN = 70
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-class Batch():
-    def __init__(self, src: torch.Tensor, trg: torch.Tensor = None, pad=0):
+class Batch:
+    def __init__(self, src:torch.Tensor, trg:torch.Tensor=None, pad=0):
         '''
         :param src: [batch_size, len]
         :param trg: [batch_size, len]
@@ -23,26 +22,24 @@ class Batch():
         if trg is not None:
             self.trg = trg[:, :-1]
             self.trg_y = trg[:, 1:]
-            # [batch_size, len-1, len-1]
-            self.trg_mask = self.create_trg_mask(self.trg, pad)
-
-        # self.trg_y_mask = (self.trg_y != pad).float()
-        self.token_num = torch.sum(self.trg_y != pad).item()
+            self.trg_mask = \
+                self.make_std_mask(self.trg, pad)
+            self.token_num = (self.trg_y != pad).data.sum()
 
         self.src, self.src_mask = self.src.to(device), self.src_mask.to(device)
         self.trg, self.trg_mask = self.trg.to(device), self.trg_mask.to(device)
         self.trg_y = self.trg_y.to(device)  # self.trg_y_mask.to(device)
 
-    def create_trg_mask(self, input: torch.Tensor, pad):
+    @staticmethod
+    def make_std_mask(trg, pad):
         # [batch_size, 1, len]
-        mask = (input != pad).unsqueeze(-2)
+        trg_mask = (trg != pad).unsqueeze(-2)
         # [1, len, len]
-        subseq_mask = generate_subseq_mask(input.size(1))
+        subseq_mask = subsequent_mask(trg.size(-1))
         # [batch_size, len, len]
-        mask = mask.long() & subseq_mask.long()
-
-        return mask
-
+        trg_mask = trg_mask & subseq_mask
+        trg_mask = trg_mask.long()
+        return trg_mask
 
 class DataLoader:
     def __init__(self, train_file, dev_file, src_suffix, trg_suffix, map_file, batch_size, pool_size, pad=0):
