@@ -28,8 +28,8 @@ def test_data_iter(test_file, src_suffix, trg_suffix, w2i_src, w2i_trg):
         line_tot += 1
         src_tks = src_line.strip().split()
         trg_tks = trg_line.strip().split()
-        src = [w2i_src[tk] for tk in src_tks + [w2i_src["</s>"]]]
-        trg = [w2i_trg[tk] for tk in [w2i_trg["<s>"]] + trg_tks + [w2i_trg["</s>"]]]
+        src = [w2i_src[tk] for tk in src_tks ]
+        trg = [w2i_trg[tk] for tk in ["<s>"] + trg_tks + ["</s>"]]
         src = torch.LongTensor([src])
         trg = torch.LongTensor([trg])
         yield(Batch(src, trg))
@@ -53,20 +53,6 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol, end_symbol):
             break
     return ys
 
-def remove_unk_pairs(w2i_map:dict):
-    unk_idx = w2i_map["<unk>"]
-    new_map = {}
-    for k, v in w2i_map.items():
-        if v == unk_idx and k != "<unk>":
-            continue
-        else:
-            new_map[k] = v
-    if "<s>" in new_map:
-        print("pad", new_map["<pad>"], "<s>", new_map[new_map["<s>"]], "</s>", new_map[new_map["</s>"]], "<unk>", new_map["<unk>"])
-    else:
-        print("pad", new_map["<pad>"], "</s>", new_map[new_map["</s>"]], "<unk>", new_map["<unk>"])
-    return new_map
-
 def load_sp_model(model_path):
     sp = spm.SentencePieceProcessor()
     sp.Load(model_path)
@@ -78,17 +64,12 @@ def test(args):
     w2i_trg_file = args.w2i_map_file + "_trg.pkl"
     with open(w2i_src_file, "rb") as f:
         w2i_src = pickle.load(f)
-        w2i_src = remove_unk_pairs(w2i_src)
         src_vocab_size = len(w2i_src)
         print("[INFO] source vocab size: {:d}".format(src_vocab_size))
     with open(w2i_trg_file, "rb") as f:
         w2i_trg = pickle.load(f)
-        w2i_trg = remove_unk_pairs(w2i_trg)
         trg_vocab_size = len(w2i_trg)
         i2w_trg = {v: str(k) for k, v in w2i_trg.items()}
-        # FORCE TO FIX BUG
-        i2w_trg[w2i_trg[w2i_trg["<s>"]]] = "<s>"
-        i2w_trg[w2i_trg[w2i_trg["</s>"]]] = "</s>"
         print("[INFO] target vocab size: {:d}".format(trg_vocab_size))
 
     w2i_src = defaultdict(lambda: w2i_src["<unk>"], w2i_src)
@@ -109,7 +90,7 @@ def test(args):
         data_iter = test_data_iter(args.test_file, args.src_suffix, args.trg_suffix, w2i_src, w2i_trg)
         for idx, cur_sample in enumerate(data_iter):
             decoded = greedy_decode(transformer, cur_sample.src, cur_sample.src_mask,
-                                    max_len, w2i_trg[w2i_trg["<s>"]], w2i_trg[w2i_trg["</s>"]])
+                                    max_len, start_symbol=w2i_trg["<s>"], end_symbol=w2i_trg["</s>"])
             decoded_str = list(decoded.cpu().numpy()[0])
             decoded_str = [i2w_trg[x] for x in decoded_str]
             # remove <s>
@@ -121,8 +102,6 @@ def test(args):
             f.write(decoded_str + "\n")
             if (idx + 1) % 1000 == 0:
                 print(idx)
-
-
 
 
 if __name__ == "__main__":
