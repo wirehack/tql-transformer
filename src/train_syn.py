@@ -3,10 +3,7 @@ import torch
 from torch import nn
 import time
 from src.utils.util_func import *
-from src.encoder_decoder import EncoderDecoder, Encoder, Decoder, EncoderLayer, DecoderLayer, Projector
 from src.modules import PositionwiseFeedForward, PositionalEncoding, Embeddings, LabelSmoothing, NoamOpt
-from src.mul_attention import MultiHeadAttention
-from copy import deepcopy
 from src.data_loader import DataLoader, Batch
 from src.config import argps
 from src.train import make_model, run_epoch
@@ -31,7 +28,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
     for i in range(max_len-1):
         ys = ys.long()
         out = model.decode(memory, ys,
-                           src_mask, generate_subseq_mask(ys.size(1)))
+                           src_mask, subsequent_mask(ys.size(1)))
         prob = model.projector(out[:, -1])
         _, next_word = torch.max(prob, dim = 1)
         next_word = next_word.data[0]
@@ -40,10 +37,10 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
 
 def train_synthetic():
     V = 11
-    model = make_model(V, V)
+    model = make_model(V, V, N=2)
     model.to(device)
     criterion = LabelSmoothing(smoothing=0.0, vocab_size=V, pad_idx=0, device=device)
-    optimizer = NoamOpt(model.parameters(), args.d_model, args.warmup, args.factor)
+    optimizer = NoamOpt(model.parameters(), 512, 400, 1)
     for ep in range(1000):
         model.train()
         train_iter = data_gen(30, 20)

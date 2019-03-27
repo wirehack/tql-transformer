@@ -24,8 +24,8 @@ class Batch:
             self.trg_y = trg[:, 1:]
             self.trg_mask = \
                 self.make_std_mask(self.trg, pad)
-            self.token_num = (self.trg_y != pad).data.sum()
-
+            self.token_num = torch.sum((self.trg_y != pad)).item()
+        self.trg_y_mask = (self.trg_y != pad).float()
         self.src, self.src_mask = self.src.to(device), self.src_mask.to(device)
         self.trg, self.trg_mask = self.trg.to(device), self.trg_mask.to(device)
         self.trg_y = self.trg_y.to(device)  # self.trg_y_mask.to(device)

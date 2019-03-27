@@ -61,7 +61,9 @@ def run_epoch(epoch, data_iter, model, criterion, optimizer=None):
                        cur_batch.src_mask, cur_batch.trg_mask)
         loss = criterion(output, cur_batch.trg_y) / cur_batch.token_num
         # output_pll = output * cur_batch.trg_y_mask.unsqueeze(-1)
-        ll_sum = torch.IntTensor([0])
+        masked_output = output * cur_batch.trg_y_mask.unsqueeze(-1)
+        ll_sum = F.nll_loss(masked_output.contiguous().view(-1, masked_output.size(-1)),
+                            cur_batch.trg_y.contiguous().view(-1), reduction='sum')
         if optimizer is not None:
             loss.backward()
             optimizer.step()
