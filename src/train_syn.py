@@ -25,8 +25,6 @@ def data_gen(batch, nbatches):
         tgt = data
         yield (Batch(src, tgt, 0))
 
-
-
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
     ys = torch.ones(1, 1).fill_(start_symbol)

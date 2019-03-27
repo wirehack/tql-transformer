@@ -14,6 +14,7 @@ from src.config import argps
 from src.train import make_model
 import pickle
 from collections import  defaultdict
+import sentencepiece as spm
 
 print = functools.partial(print, flush=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -66,6 +67,11 @@ def remove_unk_pairs(w2i_map:dict):
         print("pad", new_map["<pad>"], "</s>", new_map[new_map["</s>"]], "<unk>", new_map["<unk>"])
     return new_map
 
+def load_sp_model(model_path):
+    sp = spm.SentencePieceProcessor()
+    sp.Load(model_path)
+    return sp
+
 def test(args):
     max_len = args.max_len
     w2i_src_file = args.w2i_map_file + "_src.pkl"
@@ -88,11 +94,15 @@ def test(args):
     w2i_src = defaultdict(lambda: w2i_src["<unk>"], w2i_src)
     w2i_trg = defaultdict(lambda: w2i_trg["<unk>"], w2i_trg)
 
+    # load model
     model_info = torch.load(args.model_path + "_" + str(args.model_ckpt) + ".tar")
     transformer = make_model(src_vocab_size, trg_vocab_size)
     transformer.load_state_dict(model_info["model_state_dict"])
     transformer.to(device)
     print("[INFO] reload model from {}".format(args.model_path + "_" + str(args.model_ckpt) + ".tar"))
+
+    # load sentence piece model
+    sp = load_sp_model(args.sp_model_path)
 
     # write result here
     with open(args.result_file, "w+", encoding="utf-8") as f:
@@ -107,7 +117,7 @@ def test(args):
             # remove </s>
             if decoded_str[-1] == "</s>":
                 decoded_str = decoded_str[:-1]
-            decoded_str = " ".join(decoded_str)
+            decoded_str = sp.DecodePieces(decoded_str)
             f.write(decoded_str + "\n")
             if (idx + 1) % 1000 == 0:
                 print(idx)
