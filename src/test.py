@@ -34,6 +34,7 @@ def test_data_iter(test_file, src_suffix, trg_suffix, w2i_src, w2i_trg):
         yield(Batch(src, trg))
     src_file.close()
     trg_file.close()
+    print("[INFO] total test {:d}".format(line_tot))
 
 def greedy_decode(model, src, src_mask, max_len, start_symbol, end_symbol):
     memory = model.encode(src, src_mask)
@@ -59,7 +60,10 @@ def remove_unk_pairs(w2i_map:dict):
             continue
         else:
             new_map[k] = v
-    print("pad", new_map["<pad>"], "</s>", new_map["</s>"], "<unk>", new_map["<unk>"])
+    if "<s>" in new_map:
+        print("pad", new_map["<pad>"], "<s>", new_map[new_map["<s>"]], "</s>", new_map[new_map["</s>"]], "<unk>", new_map["<unk>"])
+    else:
+        print("pad", new_map["<pad>"], "</s>", new_map[new_map["</s>"]], "<unk>", new_map["<unk>"])
     return new_map
 
 def test(args):
@@ -75,6 +79,10 @@ def test(args):
         w2i_trg = pickle.load(f)
         w2i_trg = remove_unk_pairs(w2i_trg)
         trg_vocab_size = len(w2i_trg)
+        i2w_trg = {v: str(k) for k, v in w2i_trg.items()}
+        # FORCE TO FIX BUG
+        i2w_trg[w2i_trg[w2i_trg["<s>"]]] = "<s>"
+        i2w_trg[w2i_trg[w2i_trg["</s>"]]] = "</s>"
         print("[INFO] target vocab size: {:d}".format(trg_vocab_size))
 
     w2i_src = defaultdict(lambda: w2i_src["<unk>"], w2i_src)
@@ -84,15 +92,25 @@ def test(args):
     transformer = make_model(src_vocab_size, trg_vocab_size)
     transformer.load_state_dict(model_info["model_state_dict"])
     transformer.to(device)
+    print("[INFO] reload model from {}".format(args.model_path + "_" + str(args.model_ckpt) + ".tar"))
 
-    # write result here 
+    # write result here
     with open(args.result_file, "w+", encoding="utf-8") as f:
         data_iter = test_data_iter(args.test_file, args.src_suffix, args.trg_suffix, w2i_src, w2i_trg)
         for idx, cur_sample in enumerate(data_iter):
-            decoded = greedy_decode(transformer, cur_sample.src, cur_sample.src_mask, max_len, w2i_trg["<s>"], w2i_trg["</s>"])
+            decoded = greedy_decode(transformer, cur_sample.src, cur_sample.src_mask,
+                                    max_len, w2i_trg[w2i_trg["<s>"]], w2i_trg[w2i_trg["</s>"]])
             decoded_str = list(decoded.cpu().numpy()[0])
-            decoded_str = " ".join([str(int(x)) for x in decoded_str])
+            decoded_str = [i2w_trg[x] for x in decoded_str]
+            # remove <s>
+            decoded_str = decoded_str[1:]
+            # remove </s>
+            if decoded_str[-1] == "</s>":
+                decoded_str = decoded_str[:-1]
+            decoded_str = " ".join(decoded_str)
             f.write(decoded_str + "\n")
+            if (idx + 1) % 1000 == 0:
+                print(idx)
 
 
 
