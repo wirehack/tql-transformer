@@ -55,7 +55,6 @@ class DataLoader:
         self.w2i_trg = defaultdict(lambda: len(self.w2i_trg))
         pad = self.w2i_src["<pad>"]
         pad = self.w2i_trg["<pad>"]
-        ed = self.w2i_src["</s>"]
         st = self.w2i_trg["<s>"]
         ed = self.w2i_trg["</s>"]
         unk = self.w2i_src["<unk>"]
@@ -63,17 +62,9 @@ class DataLoader:
         self.all_train = list(self.load_data(self.train_file, src_suffix, trg_suffix))
         self.w2i_src = defaultdict(lambda: self.w2i_src["<unk>"], self.w2i_src)
         self.w2i_trg = defaultdict(lambda: self.w2i_trg["<unk>"], self.w2i_trg)
-        self.i2w_src = {v: k for k, v in self.w2i_src.items()}
-        self.i2w_trg = {v: k for k, v in self.w2i_trg.items()}
         # sort training data by input length
         self.src_vocab_size = len(self.w2i_src)
         self.trg_vocab_size = len(self.w2i_trg)
-
-        if self.dev_file:
-            self.all_dev = list(self.load_data(self.dev_file, src_suffix, trg_suffix))
-        else:
-            self.all_dev = None
-
         # save map
         with open(map_file + "_src.pkl", "wb") as f:
             pickle.dump(dict(self.w2i_src), f)
@@ -83,6 +74,11 @@ class DataLoader:
             pickle.dump(dict(self.w2i_trg), f)
             print(
                 "[INFO] save target char to idx map to :{}, len: {:d}".format(map_file + "_trg.pkl", len(self.w2i_trg)))
+
+        if self.dev_file:
+            self.all_dev = list(self.load_data(self.dev_file, src_suffix, trg_suffix))
+        else:
+            self.all_dev = None
 
     def load_data(self, file_name, src_suffix, trg_suffix):
         line_tot = 0
@@ -95,8 +91,8 @@ class DataLoader:
             # filter sentence pair if ENG sentence is longer than 70 or FR > 80
             if len(trg_tks) >= MAX_LEN or len(src_tks) > MAX_LEN:
                 continue
-            src = [self.w2i_src[tk] for tk in src_tks + [self.w2i_src["</s>"]]]
-            trg = [self.w2i_trg[tk] for tk in [self.w2i_trg["<s>"]] + trg_tks + [self.w2i_trg["</s>"]]]
+            src = [self.w2i_src[tk] for tk in src_tks]
+            trg = [self.w2i_trg[tk] for tk in ["<s>"] + trg_tks + ["</s>"]]
             yield (src, trg)
         print("[INFO] number of lines in {}: {}".format(file_name, str(line_tot)))
 
@@ -137,8 +133,8 @@ class DataLoader:
                 max_trg_seq_len = max(max_trg_seq_len, cur_trg_seq_len)
                 new_trg_tot_tokens = (batch_size + 1) * max_trg_seq_len
 
-                if new_tot_tokens > self.batch_size or new_trg_tot_tokens > self.batch_size or idx == (
-                        len(src_seq_len) - 1):
+                if new_tot_tokens > self.batch_size or new_trg_tot_tokens > self.batch_size \
+                        or idx == (len(src_seq_len) - 1):
                     batches.append((prev_start, batch_size))
                     prev_start = idx
                     batch_size = 1
@@ -146,44 +142,14 @@ class DataLoader:
                     batch_size += 1
             batches.append((prev_start, batch_size))
 
-            # for idx in range(1, len(src_seq_len)):
-            #     if batch_size == self.batch_size or idx == (cur_size - 1):
-            #         batches.append((prev_start, batch_size))
-            #         prev_start = idx
-            #         batch_size = 1
-            #     else:
-            #         batch_size += 1
-            # batches.append((prev_start, batch_size))
-
             random.shuffle(batches)
             for st, batch_size in batches:
                 cur_data = cur_pool[st:st + batch_size]
-
                 src_sents = [torch.LongTensor(x[0]) for x in cur_data]
-                # src_seq_len = [len(x) for x in src_sents]
-                # src_max_len = max(src_seq_len)
-
                 trg_sents = [torch.LongTensor(x[1]) for x in cur_data]
-                # trg_seq_len = [len(x) for x in trg_sents]
-                # trg_max_len = max(trg_seq_len)
-                # print(batch_size, src_max_len, trg_max_len, batch_size * src_max_len, batch_size * trg_max_len)
                 # pad
                 src_sents = torch.nn.utils.rnn.pad_sequence(src_sents, batch_first=True, padding_value=self.pad)
                 trg_sents = torch.nn.utils.rnn.pad_sequence(trg_sents, batch_first=True, padding_value=self.pad)
 
                 yield (Batch(src_sents, trg_sents))
 
-            # for j in range(0, len(cur_pool), self.batch_size):
-            #     cur_size = min(self.batch_size, len(cur_pool) - j)
-            #     cur_data = cur_pool[j:j+cur_size]
-            #     src_sents = [x[0] for x in cur_data]
-            #     src_seq_len = [len(x) for x in src_sents]
-            #     src_max_len = max(src_seq_len)
-            #
-            #     trg_sents = [x[1] for x in cur_data]
-            #     trg_seq_len = [len(x) for x in trg_sents]
-            #     trg_max_len = max(trg_seq_len)
-            #     # pad
-            #     src_sents = torch.LongTensor([x + [self.pad for i in range(src_max_len-x_len)] for x, x_len in zip(src_sents, src_seq_len)])
-            #     trg_sents = torch.LongTensor([x + [self.pad for i in range(trg_max_len-x_len)] for x, x_len in zip(trg_sents, trg_seq_len)])
-            #     yield(Batch(src_sents, trg_sents))
