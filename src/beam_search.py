@@ -121,8 +121,9 @@ class SeqGenerator(object):
         seqs = [complete_seqs[i].extract(descend=True) for i in range(batch_size)]
         for s in seqs:
             for seq in s:
-                print(seq.wids)
-        return seqs
+                # print(seq.wids)
+        # return seqs
+                return torch.LongTensor([seq.wids])
 
 
 def beam_search_decode_step(model, src_mask, memory, this_input, beam_size):
@@ -145,10 +146,10 @@ def beam_search_decode_step(model, src_mask, memory, this_input, beam_size):
     return out_wids, lprobs
 
 
-def beam_search_decode(decode_step, model, src, src_mask, max_len, sos_id, eos_id, beam_size):
+def beam_search_decode(decode_step, model, src, src_mask, max_len, start_symbol, end_symbol, beam_size):
     memory = model.encode(src, src_mask)
-    ys = torch.ones(1, 1).fill_(sos_id).type_as(src.data)
-    Decoder = SeqGenerator(decode_step, model, src_mask, memory, eos_id, beam_size, max_seq_len=max_len)
+    ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
+    Decoder = SeqGenerator(decode_step, model, src_mask, memory, end_symbol, beam_size, max_seq_len=max_len)
     seqs = Decoder.beam_search(ys)
 
     return seqs

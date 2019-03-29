@@ -16,6 +16,8 @@ import pickle
 from collections import  defaultdict
 import sentencepiece as spm
 
+from src.beam_search import beam_search_decode_step,beam_search_decode
+
 print = functools.partial(print, flush=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -89,8 +91,11 @@ def test(args):
     with open(args.result_file, "w+", encoding="utf-8") as f:
         data_iter = test_data_iter(args.test_file, args.src_suffix, args.trg_suffix, w2i_src, w2i_trg)
         for idx, cur_sample in enumerate(data_iter):
-            decoded = greedy_decode(transformer, cur_sample.src, cur_sample.src_mask,
-                                    max_len, start_symbol=w2i_trg["<s>"], end_symbol=w2i_trg["</s>"])
+            # decoded = greedy_decode(transformer, cur_sample.src, cur_sample.src_mask,
+            #                         max_len, start_symbol=w2i_trg["<s>"], end_symbol=w2i_trg["</s>"])
+            decoded = beam_search_decode(beam_search_decode_step,transformer, cur_sample.src, cur_sample.src_mask,
+                                    max_len, start_symbol=w2i_trg["<s>"], end_symbol=w2i_trg["</s>"],beam_size=5)
+
             decoded_str = list(decoded.cpu().numpy()[0])
             decoded_str = [i2w_trg[x] for x in decoded_str]
             # remove <s>
